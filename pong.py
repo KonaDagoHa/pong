@@ -109,8 +109,8 @@ class Computer(pygame.sprite.Sprite):
 
 class Ball(pygame.sprite.Sprite):
     # Constants
-    VEL_MAGNITUDE = 10
-    MAX_BOUNCE_ANGLE = 45
+    VEL_MAGNITUDE = 5
+    MAX_BOUNCE_ANGLE = 75
 
     def __init__(self):
         super().__init__()
@@ -142,14 +142,17 @@ class Ball(pygame.sprite.Sprite):
         collision = pygame.sprite.spritecollideany(self, Pong.paddle_sprites, False)
         if collision:
             intersect_point = self.rect.clip(collision.rect).center
-            # Center-y of paddle - intersection point = relative intersection point
-            relative_intersect_y = collision.pos.y + (collision.rect.height / 2) - intersect_point[1]
-            # Relative intersection / half of paddle height = normalized relative intersection point
-            normed_relative_intersect_y = relative_intersect_y / (collision.rect.height / 2)
-            # Hit ball at edge -> bigger angle, higher speed
-            bounce_angle = normed_relative_intersect_y * Ball.MAX_BOUNCE_ANGLE
+            # Center-y of paddle - intersection point = distance from center-y
+            distance_from_center_y = collision.pos.y + (collision.rect.height / 2) - intersect_point[1]
+            # Distance from center-y / half of paddle height = normalized distance from center-y
+            normed_distance = distance_from_center_y / (collision.rect.height / 2)
+            # Hit ball at edge -> bigger angle
+            bounce_angle = normed_distance * Ball.MAX_BOUNCE_ANGLE
             # Ball speed * cos(max bounce angle) = velocity
-            self.vel.x = Ball.VEL_MAGNITUDE * cos(radians(bounce_angle))
+            if self.vel.x < 0:
+                self.vel.x = Ball.VEL_MAGNITUDE * cos(radians(bounce_angle))
+            else:
+                self.vel.x = Ball.VEL_MAGNITUDE * -cos(radians(bounce_angle))
             self.vel.y = Ball.VEL_MAGNITUDE * -sin(radians(bounce_angle))
 
     def update(self):
@@ -158,6 +161,18 @@ class Ball(pygame.sprite.Sprite):
 
         self.pos += self.vel
         self.rect.center = self.pos
+
+
+class Interface:
+    def __init__(self, game):
+        self.game = game
+        self.font_name = pygame.font.match_font("arial")
+
+    def draw_text(self, text, size, color, x, y):
+        font = pygame.font.Font(self.font_name, size)
+        text_surface = font.render(text, True, color)
+        text_rect = text_surface.get_rect(center=(x, y))
+        self.game.screen.blit(text_surface, text_rect)
 
 
 class Pong:
@@ -185,6 +200,8 @@ class Pong:
         Pong.paddle_sprites.add(player, computer)
         Pong.ball_sprites.add(ball)
 
+        self.interface = Interface(self)
+
     def run(self):
         # Game loop
         while self.is_running:
@@ -200,6 +217,7 @@ class Pong:
 
     def draw(self):
         self.screen.fill((0, 0, 0))
+        self.interface.draw_text("SCORE", 48, (255, 255, 255), Pong.RESOLUTION[0]/2, 50)
         self.all_sprites.draw(self.screen)
         pygame.display.update()
 
