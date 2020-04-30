@@ -1,24 +1,23 @@
-from random import randint
 from math import cos, sin, radians
 import pygame
 
 
 class Player(pygame.sprite.Sprite):
-    # Constants
-    ACC_MAGNITUDE = 1
-    FRICTION = -0.12
-
     def __init__(self):
         super().__init__()
         # Pygame
         self.image = pygame.Surface((15, 50))
         self.image.fill((255, 255, 255))
-        self.rect = self.image.get_rect(topleft=(50, 50))
+        self.rect = self.image.get_rect(topleft=(10, 10))
 
         # Physics
         self.pos = pygame.Vector2(self.rect.topleft)
         self.vel = pygame.Vector2(0, 0)
         self.acc = pygame.Vector2(0, 0)
+
+        # Constants
+        self.MAX_ACC = 1
+        self.FRICTION = -0.12
 
     def collide_edge(self):
         if self.pos.x < 0:
@@ -39,17 +38,17 @@ class Player(pygame.sprite.Sprite):
         self.acc = pygame.Vector2(0, 0)
 
         if keys[pygame.K_w] or keys[pygame.K_UP]:
-            self.acc.y -= Player.ACC_MAGNITUDE
-        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-            self.acc.x -= Player.ACC_MAGNITUDE
+            self.acc.y -= self.MAX_ACC
+        # if keys[pygame.K_a] or keys[pygame.K_LEFT]:
+            # self.acc.x -= self.ACC_MAGNITUDE
         if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            self.acc.y += Player.ACC_MAGNITUDE
-        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-            self.acc.x += Player.ACC_MAGNITUDE
+            self.acc.y += self.MAX_ACC
+        # if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+            # self.acc.x += self.ACC_MAGNITUDE
 
         self.collide_edge()
 
-        self.acc += self.vel * Player.FRICTION
+        self.acc += self.vel * self.FRICTION
         self.vel += self.acc
         self.pos += self.vel + (0.5 * self.acc)
 
@@ -57,22 +56,22 @@ class Player(pygame.sprite.Sprite):
 
 
 class Computer(pygame.sprite.Sprite):
-    # Constants
-    ACC_MAGNITUDE = 0.5
-    FRICTION = -0.12
-
     def __init__(self):
         super().__init__()
         self.image = pygame.Surface((15, 50))
         self.image.fill((255, 255, 255))
-        self.rect = self.image.get_rect(topleft=(Pong.RESOLUTION[0] - 50, 50))
+        self.rect = self.image.get_rect(topleft=(Pong.RESOLUTION[0] - 15 - 10, 10))
 
         # Physics
         self.pos = pygame.Vector2(self.rect.topleft)
         self.vel = pygame.Vector2(0, 0)
         self.acc = pygame.Vector2(0, 0)
 
-        self.moving_up = False
+        self.last_move_time = 0
+
+        # Constants
+        self.MAX_ACC = 10
+        self.FRICTION = -0.12
 
     def collide_edge(self):
         if self.pos.x < 0:
@@ -84,23 +83,26 @@ class Computer(pygame.sprite.Sprite):
         if self.pos.y < 0:
             self.pos.y = 0
             self.vel.y = 0
-            self.moving_up = False
         if self.pos.y > Pong.RESOLUTION[1] - self.rect.height:
             self.pos.y = Pong.RESOLUTION[1] - self.rect.height
             self.vel.y = 0
-            self.moving_up = True
 
     def update(self):
         self.acc = pygame.Vector2(0, 0)
-
-        if self.moving_up:
-            self.acc.y -= Computer.ACC_MAGNITUDE
-        else:
-            self.acc.y += Computer.ACC_MAGNITUDE
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_move_time > 100:
+            for ball in Pong.ball_sprites:
+                distance_from_ball = abs(self.pos.x - ball.pos.x)
+                if distance_from_ball < 200:
+                    if ball.pos.y < self.pos.y:
+                        self.acc.y -= self.MAX_ACC
+                    if ball.pos.y > self.pos.y:
+                        self.acc.y += self.MAX_ACC
+                    self.last_move_time = current_time  # Fixes computer shaking
 
         self.collide_edge()
 
-        self.acc += self.vel * Computer.FRICTION
+        self.acc += self.vel * self.FRICTION
         self.vel += self.acc
         self.pos += self.vel + (0.5 * self.acc)
 
@@ -108,59 +110,63 @@ class Computer(pygame.sprite.Sprite):
 
 
 class Ball(pygame.sprite.Sprite):
-    # Constants
-    VEL_MAGNITUDE = 5
-    MAX_BOUNCE_ANGLE = 75
-
     def __init__(self):
         super().__init__()
         self.image = pygame.Surface((15, 15))
         self.image.fill((255, 255, 255))
-        self.rect = self.image.get_rect(center=(Pong.RESOLUTION[0]/2, Pong.RESOLUTION[1]/2))
+        self.rect = self.image.get_rect(topleft=(Pong.RESOLUTION[0]/2, Pong.RESOLUTION[1]/2))
 
         # Physics
-        self.pos = pygame.Vector2(self.rect.center)
-        self.vel = pygame.Vector2(randint(-1, 1) * Ball.VEL_MAGNITUDE, 0)
+        self.pos = pygame.Vector2(self.rect.topleft)
+        self.vel = pygame.Vector2(5, 0)
 
-        self.radius = self.rect.width / 2
+        self.last_collision_time = 0
+
+        # Constants
+        self.MAX_SPEED = 8
+        self.MAX_BOUNCE_ANGLE = 50
 
     def collide_edge(self):
-        if self.pos.x < self.radius:
-            self.pos.x = self.radius
+        if self.pos.x < 0:
+            self.pos.x = 0
             self.vel.x = -self.vel.x
-        if self.pos.x > Pong.RESOLUTION[0] - self.radius:
-            self.pos.x = Pong.RESOLUTION[0] - self.radius
+        if self.pos.x > Pong.RESOLUTION[0] - self.rect.width:
+            self.pos.x = Pong.RESOLUTION[0] - self.rect.width
             self.vel.x = -self.vel.x
-        if self.pos.y < self.radius:
-            self.pos.y = self.radius
+        if self.pos.y < 0:
+            self.pos.y = 0
             self.vel.y = -self.vel.y
-        if self.pos.y > Pong.RESOLUTION[1] - self.radius:
-            self.pos.y = Pong.RESOLUTION[1] - self.radius
+        if self.pos.y > Pong.RESOLUTION[1] - self.rect.height:
+            self.pos.y = Pong.RESOLUTION[1] - self.rect.height
             self.vel.y = -self.vel.y
 
     def collide_paddle(self):
         collision = pygame.sprite.spritecollideany(self, Pong.paddle_sprites, False)
-        if collision:
-            intersect_point = self.rect.clip(collision.rect).center
+        current_time = pygame.time.get_ticks()
+        if collision and current_time - self.last_collision_time > 500:
+            self.last_collision_time = current_time  # Fixes bug where ball gets stuck on paddle
+
+            intersect_point = collision.rect.clip(self.rect).center
             # Center-y of paddle - intersection point = distance from center-y
             distance_from_center_y = collision.pos.y + (collision.rect.height / 2) - intersect_point[1]
             # Distance from center-y / half of paddle height = normalized distance from center-y
             normed_distance = distance_from_center_y / (collision.rect.height / 2)
-            # Hit ball at edge -> bigger angle
-            bounce_angle = normed_distance * Ball.MAX_BOUNCE_ANGLE
+            # Hit ball at edge -> bigger angle, higher speed
+            bounce_angle = normed_distance * self.MAX_BOUNCE_ANGLE
+            speed = max(normed_distance * self.MAX_SPEED, self.MAX_SPEED / 2)
             # Ball speed * cos(max bounce angle) = velocity
             if self.vel.x < 0:
-                self.vel.x = Ball.VEL_MAGNITUDE * cos(radians(bounce_angle))
+                self.vel.x = speed * cos(radians(bounce_angle))
             else:
-                self.vel.x = Ball.VEL_MAGNITUDE * -cos(radians(bounce_angle))
-            self.vel.y = Ball.VEL_MAGNITUDE * -sin(radians(bounce_angle))
+                self.vel.x = speed * -cos(radians(bounce_angle))
+            self.vel.y = speed * -sin(radians(bounce_angle))
 
     def update(self):
         self.collide_paddle()
         self.collide_edge()
 
         self.pos += self.vel
-        self.rect.center = self.pos
+        self.rect.topleft = self.pos
 
 
 class Interface:
