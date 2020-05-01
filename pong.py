@@ -1,4 +1,4 @@
-from math import cos, sin, radians
+from math import cos, sin, radians, copysign
 from random import choice
 import pygame
 
@@ -9,7 +9,7 @@ class Player(pygame.sprite.Sprite):
         # Pygame
         self.image = pygame.Surface((15, 50))
         self.image.fill((255, 255, 255))
-        self.rect = self.image.get_rect(topleft=(10, 10))
+        self.rect = self.image.get_rect(topleft=(20, 20))
 
         # Physics
         self.pos = pygame.Vector2(self.rect.topleft)
@@ -17,7 +17,7 @@ class Player(pygame.sprite.Sprite):
         self.acc = pygame.Vector2(0, 0)
 
         # Constants
-        self.MAX_ACC = 1
+        self.MAX_ACC = 0.5
         self.FRICTION = -0.12
 
     def collide_edge(self):
@@ -40,12 +40,8 @@ class Player(pygame.sprite.Sprite):
 
         if keys[pygame.K_w] or keys[pygame.K_UP]:
             self.acc.y -= self.MAX_ACC
-        # if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-            # self.acc.x -= self.ACC_MAGNITUDE
         if keys[pygame.K_s] or keys[pygame.K_DOWN]:
             self.acc.y += self.MAX_ACC
-        # if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-            # self.acc.x += self.ACC_MAGNITUDE
 
         self.collide_edge()
 
@@ -61,7 +57,7 @@ class Computer(pygame.sprite.Sprite):
         super().__init__()
         self.image = pygame.Surface((15, 50))
         self.image.fill((255, 255, 255))
-        self.rect = self.image.get_rect(topleft=(Pong.RESOLUTION[0] - 15 - 10, 10))
+        self.rect = self.image.get_rect(topleft=(Pong.RESOLUTION[0] - 15 - 20, 20))
 
         # Physics
         self.pos = pygame.Vector2(self.rect.topleft)
@@ -71,7 +67,7 @@ class Computer(pygame.sprite.Sprite):
         self.last_move_time = 0
 
         # Constants
-        self.MAX_ACC = 5
+        self.MAX_ACC = 0.5
         self.FRICTION = -0.12
 
     def collide_edge(self):
@@ -90,16 +86,15 @@ class Computer(pygame.sprite.Sprite):
 
     def update(self):
         self.acc = pygame.Vector2(0, 0)
-        current_time = pygame.time.get_ticks()
-        if current_time - self.last_move_time > 100:
-            for ball in Pong.ball_sprites:
-                distance_from_ball = abs(self.pos.x - ball.pos.x)
-                if distance_from_ball < 200:
-                    if ball.pos.y < self.pos.y:
-                        self.acc.y -= self.MAX_ACC
-                    if ball.pos.y > self.pos.y:
-                        self.acc.y += self.MAX_ACC
-                    self.last_move_time = current_time  # Fixes computer shaking
+
+        # Predict and follow ball (AI)
+        for ball in Pong.ball_sprites:
+            if ball.vel.x > 0:
+                distance_from_ball_y = ball.future_pos.y - self.pos.y
+                if abs(distance_from_ball_y) > 5:
+                    self.acc.y += copysign(1, distance_from_ball_y) * self.MAX_ACC
+                else:
+                    self.acc.y = 0
 
         self.collide_edge()
 
@@ -118,7 +113,7 @@ class Ball(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(topleft=(Pong.RESOLUTION[0]/2, Pong.RESOLUTION[1]/2))
 
         # Constants
-        self.MAX_SPEED = 8
+        self.MAX_SPEED = 10
         self.MAX_BOUNCE_ANGLE = 60
 
         # Physics
@@ -133,6 +128,7 @@ class Ball(pygame.sprite.Sprite):
         self.future_rect = self.rect.copy()
         self.future_pos = pygame.Vector2(self.future_rect.topleft)
         self.future_vel = pygame.Vector2(self.vel.xy * 2)
+        self.future_speed_scalar = 2  # Increase this to improve AI prediction
 
         """ DELETE THIS LATER """
         self.future_image = pygame.Surface((15, 15))
@@ -142,9 +138,15 @@ class Ball(pygame.sprite.Sprite):
         if self.pos.x < 0:
             self.pos.x = 0
             self.vel.x = -self.vel.x
+            # Future Ball
+            self.future_pos = pygame.Vector2(self.pos.xy)
+            self.future_vel = pygame.Vector2(self.vel.xy) * self.future_speed_scalar
         elif self.pos.x > Pong.RESOLUTION[0] - self.rect.width:
             self.pos.x = Pong.RESOLUTION[0] - self.rect.width
             self.vel.x = -self.vel.x
+            # Future Ball
+            self.future_pos = pygame.Vector2(self.pos.xy)
+            self.future_vel = pygame.Vector2(self.vel.xy) * self.future_speed_scalar
         if self.pos.y < 0:
             self.pos.y = 0
             self.vel.y = -self.vel.y
@@ -194,7 +196,7 @@ class Ball(pygame.sprite.Sprite):
 
             # Future ball
             self.future_pos = pygame.Vector2(self.pos.xy)
-            self.future_vel = pygame.Vector2(self.vel.xy) * 2
+            self.future_vel = pygame.Vector2(self.vel.xy) * self.future_speed_scalar
 
     def update(self):
         self.collide_paddle()
