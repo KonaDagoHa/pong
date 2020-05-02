@@ -1,36 +1,43 @@
-from math import cos, sin, radians, copysign
-from random import choice
+from math import cos, sin, radians
+from random import choice, uniform
 import pygame
 
 
+# TODO: Add start menu, allow player to choose left or right
 class Player(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
+        size = (15, 50)
+        self.INIT_POS = (20, Pong.RESOLUTION[1]/2 - size[1]/2)
+
         # Pygame
-        self.image = pygame.Surface((15, 50))
+        self.image = pygame.Surface(size)
         self.image.fill((255, 255, 255))
-        self.rect = self.image.get_rect(topleft=(20, 20))
+        self.rect = self.image.get_rect(topleft=self.INIT_POS)
 
         # Physics
         self.pos = pygame.Vector2(self.rect.topleft)
         self.vel = pygame.Vector2(0, 0)
         self.acc = pygame.Vector2(0, 0)
 
-        # Constants
-        self.MAX_ACC = 0.5
+        # Score
+        self.score = 0
+
+        # Physics constants
+        self.MAX_ACC = 1
         self.FRICTION = -0.12
 
+    def reset(self):
+        self.rect.topleft = self.INIT_POS
+        self.pos = pygame.Vector2(self.INIT_POS)
+        self.vel = pygame.Vector2(0, 0)
+        self.acc = pygame.Vector2(0, 0)
+
     def collide_edge(self):
-        if self.pos.x < 0:
-            self.pos.x = 0
-            self.vel.x = 0
-        if self.pos.x > Pong.RESOLUTION[0] - self.rect.width:
-            self.pos.x = Pong.RESOLUTION[0] - self.rect.width
-            self.vel.x = 0
         if self.pos.y < 0:
             self.pos.y = 0
             self.vel.y = 0
-        if self.pos.y > Pong.RESOLUTION[1] - self.rect.height:
+        elif self.pos.y > Pong.RESOLUTION[1] - self.rect.height:
             self.pos.y = Pong.RESOLUTION[1] - self.rect.height
             self.vel.y = 0
 
@@ -55,46 +62,51 @@ class Player(pygame.sprite.Sprite):
 class Computer(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
-        self.image = pygame.Surface((15, 50))
+        size = (15, 50)
+        self.INIT_POS = (Pong.RESOLUTION[0] - size[0] - 20, Pong.RESOLUTION[1]/2 - size[1]/2)
+        self.image = pygame.Surface(size)
         self.image.fill((255, 255, 255))
-        self.rect = self.image.get_rect(topleft=(Pong.RESOLUTION[0] - 15 - 20, 20))
+        self.rect = self.image.get_rect(topleft=self.INIT_POS)
 
         # Physics
         self.pos = pygame.Vector2(self.rect.topleft)
         self.vel = pygame.Vector2(0, 0)
         self.acc = pygame.Vector2(0, 0)
 
-        self.last_move_time = 0
+        # Score
+        self.score = 0
 
         # Constants
-        self.MAX_ACC = 0.5
+        self.MAX_ACC = 2
         self.FRICTION = -0.12
 
+    def reset(self):
+        self.rect.topleft = self.INIT_POS
+        self.pos = pygame.Vector2(self.INIT_POS)
+        self.vel = pygame.Vector2(0, 0)
+        self.acc = pygame.Vector2(0, 0)
+
     def collide_edge(self):
-        if self.pos.x < 0:
-            self.pos.x = 0
-            self.vel.x = 0
-        if self.pos.x > Pong.RESOLUTION[0] - self.rect.width:
-            self.pos.x = Pong.RESOLUTION[0] - self.rect.width
-            self.vel.x = 0
         if self.pos.y < 0:
             self.pos.y = 0
             self.vel.y = 0
-        if self.pos.y > Pong.RESOLUTION[1] - self.rect.height:
+        elif self.pos.y > Pong.RESOLUTION[1] - self.rect.height:
             self.pos.y = Pong.RESOLUTION[1] - self.rect.height
             self.vel.y = 0
+
+    def track_ball(self):
+        # Predict and follow ball (AI)
+        for ball in Pong.ball_sprites:
+            if ball.vel.x > 0 or ball.pos.x > Pong.RESOLUTION[0] / 2:
+                distance_from_ball_y = (ball.future_pos.y + ball.future_rect.height / 2) - \
+                                       (self.pos.y + self.rect.height / 2)
+                normed_distance_y = distance_from_ball_y / (Pong.RESOLUTION[1] - self.rect.width/2 - ball.rect.width/2)
+                self.acc.y += normed_distance_y * self.MAX_ACC
 
     def update(self):
         self.acc = pygame.Vector2(0, 0)
 
-        # Predict and follow ball (AI)
-        for ball in Pong.ball_sprites:
-            if ball.vel.x > 0:
-                distance_from_ball_y = ball.future_pos.y - self.pos.y
-                if abs(distance_from_ball_y) > 5:
-                    self.acc.y += copysign(1, distance_from_ball_y) * self.MAX_ACC
-                else:
-                    self.acc.y = 0
+        self.track_ball()
 
         self.collide_edge()
 
@@ -108,45 +120,65 @@ class Computer(pygame.sprite.Sprite):
 class Ball(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
-        self.image = pygame.Surface((15, 15))
-        self.image.fill((255, 255, 255))
-        self.rect = self.image.get_rect(topleft=(Pong.RESOLUTION[0]/2, Pong.RESOLUTION[1]/2))
+        size = (15, 15)
+        self.CENTER_SCREEN = (Pong.RESOLUTION[0]/2 - size[0]/2, Pong.RESOLUTION[1]/2 - size[1]/2)
 
-        # Constants
+        self.image = pygame.Surface(size)
+        self.image.fill((255, 255, 255))
+        self.rect = self.image.get_rect(topleft=self.CENTER_SCREEN)
+
+        # Misc.
+        self.last_collision_time = 0
+        self.reset_time = 0
+        self.is_paused = False
+
+        # Physics Constants
         self.MAX_SPEED = 10
         self.MAX_BOUNCE_ANGLE = 60
 
         # Physics
         self.pos = pygame.Vector2(self.rect.topleft)
-        self.vel = pygame.Vector2(choice((-self.MAX_SPEED/2, self.MAX_SPEED/2)),
-                                  choice((-self.MAX_SPEED/2, 0, self.MAX_SPEED/2)))
-
-        # Misc.
-        self.last_collision_time = 0
+        self.vel = pygame.Vector2(choice((-0.25, 0.25)) * self.MAX_SPEED,
+                                  uniform(-0.25, 0.25) * self.MAX_SPEED)
 
         # Future invisible ball used for AI to predict ball path
+        self.future_speed_scalar = 1.4  # Increase this to improve AI prediction
         self.future_rect = self.rect.copy()
         self.future_pos = pygame.Vector2(self.future_rect.topleft)
-        self.future_vel = pygame.Vector2(self.vel.xy * 2)
-        self.future_speed_scalar = 2  # Increase this to improve AI prediction
+        self.future_vel = pygame.Vector2(self.vel.xy * self.future_speed_scalar)
 
         """ DELETE THIS LATER """
         self.future_image = pygame.Surface((15, 15))
         self.future_image.fill((0, 255, 0))
 
+    def reset(self):
+        current_time = pygame.time.get_ticks()
+        if current_time - self.reset_time > 1000:
+            self.is_paused = False
+            # Paddles
+            for paddle in Pong.paddle_sprites:
+                paddle.reset()
+
+            # Ball
+            self.rect.topleft = self.CENTER_SCREEN
+            self.pos = pygame.Vector2(self.CENTER_SCREEN)
+            self.vel = pygame.Vector2(choice((-0.25, 0.25)) * self.MAX_SPEED,
+                                      uniform(-0.25, 0.25) * self.MAX_SPEED)
+
+            # Future ball
+            self.future_rect.topleft = self.CENTER_SCREEN
+            self.future_pos = pygame.Vector2(self.CENTER_SCREEN)
+            self.future_vel = pygame.Vector2(self.vel.xy * self.future_speed_scalar)
+
     def collide_edge(self):
         if self.pos.x < 0:
-            self.pos.x = 0
-            self.vel.x = -self.vel.x
-            # Future Ball
-            self.future_pos = pygame.Vector2(self.pos.xy)
-            self.future_vel = pygame.Vector2(self.vel.xy) * self.future_speed_scalar
+            Pong.computer.score += 1
+            self.is_paused = True
+            self.reset_time = pygame.time.get_ticks()
         elif self.pos.x > Pong.RESOLUTION[0] - self.rect.width:
-            self.pos.x = Pong.RESOLUTION[0] - self.rect.width
-            self.vel.x = -self.vel.x
-            # Future Ball
-            self.future_pos = pygame.Vector2(self.pos.xy)
-            self.future_vel = pygame.Vector2(self.vel.xy) * self.future_speed_scalar
+            Pong.player.score += 1
+            self.is_paused = True
+            self.reset_time = pygame.time.get_ticks()
         if self.pos.y < 0:
             self.pos.y = 0
             self.vel.y = -self.vel.y
@@ -180,13 +212,13 @@ class Ball(pygame.sprite.Sprite):
 
             # Bounce ball off paddle
             collision_point = collision.rect.clip(self.rect).center
-            # Center-y of paddle - intersection point = distance from center-y
-            distance_from_center_y = collision.pos.y + (collision.rect.height / 2) - collision_point[1]
-            # Distance from center-y / half of paddle height = normalized distance from center-y
-            normed_distance = distance_from_center_y / (collision.rect.height / 2)
+            # Distance from center-y = Center-y of paddle - intersection point
+            distance_from_center_y = (collision.pos.y + collision.rect.height / 2) - collision_point[1]
+            # Normalized distance from center-y = distance from center-y / half of paddle height
+            normed_distance_y = distance_from_center_y / (collision.rect.height / 2)
             # Hit ball at edge -> bigger angle, higher speed
-            bounce_angle = normed_distance * self.MAX_BOUNCE_ANGLE
-            speed = max(normed_distance * self.MAX_SPEED, self.MAX_SPEED / 2)
+            bounce_angle = normed_distance_y * self.MAX_BOUNCE_ANGLE
+            speed = max(abs(normed_distance_y * self.MAX_SPEED), self.MAX_SPEED / 2)
             # Ball speed * cos(max bounce angle) = velocity
             if self.vel.x < 0:
                 self.vel.x = speed * cos(radians(bounce_angle))
@@ -199,17 +231,18 @@ class Ball(pygame.sprite.Sprite):
             self.future_vel = pygame.Vector2(self.vel.xy) * self.future_speed_scalar
 
     def update(self):
-        self.collide_paddle()
-        self.collide_edge()
+        if self.is_paused:
+            self.reset()
+        else:
+            self.collide_paddle()
+            self.collide_edge()
 
-        self.pos += self.vel
-        self.rect.topleft = self.pos
+            self.pos += self.vel
+            self.rect.topleft = self.pos
 
-        # Future ball
-        self.future_pos += self.future_vel
-        self.future_rect.topleft = self.future_pos
-
-        print("{} {}".format(self.pos, self.future_pos))
+            # Future ball
+            self.future_pos += self.future_vel
+            self.future_rect.topleft = self.future_pos
 
 
 class Interface:
@@ -232,6 +265,8 @@ class Pong:
     paddle_sprites = pygame.sprite.Group()
     ball_sprites = pygame.sprite.Group()
     screen = None
+    player = None
+    computer = None
 
     def __init__(self):
         pygame.init()
@@ -242,11 +277,11 @@ class Pong:
         self.is_running = True
 
         # Sprites
-        player = Player()
-        computer = Computer()
+        Pong.player = Player()
+        Pong.computer = Computer()
         ball = Ball()
-        Pong.all_sprites.add(player, computer, ball)
-        Pong.paddle_sprites.add(player, computer)
+        Pong.all_sprites.add(Pong.player, Pong.computer, ball)
+        Pong.paddle_sprites.add(Pong.player, Pong.computer)
         Pong.ball_sprites.add(ball)
 
         self.interface = Interface()
@@ -266,7 +301,7 @@ class Pong:
 
     def draw(self):
         Pong.screen.fill((0, 0, 0))
-        self.interface.draw_text("SCORE", 48, (255, 255, 255), Pong.RESOLUTION[0]/2, 50)
+        self.interface.draw_text("{} | {}".format(self.player.score, self.computer.score), 48, (255, 255, 255), Pong.RESOLUTION[0]/2, 50)
         self.all_sprites.draw(Pong.screen)
 
         """ DELETE THIS LATER """
