@@ -3,7 +3,6 @@ from random import choice, uniform
 import pygame
 
 
-# TODO: Add start menu, allow player to choose left or right
 class Player(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
@@ -78,7 +77,7 @@ class Computer(pygame.sprite.Sprite):
 
         # Constants
         self.MAX_ACC = 2
-        self.FRICTION = -0.12
+        self.FRICTION = -0.09
 
     def reset(self):
         self.rect.topleft = self.INIT_POS
@@ -133,7 +132,7 @@ class Ball(pygame.sprite.Sprite):
         self.is_paused = False
 
         # Physics Constants
-        self.MAX_SPEED = 10
+        self.MAX_SPEED = 12
         self.MAX_BOUNCE_ANGLE = 60
 
         # Physics
@@ -147,9 +146,9 @@ class Ball(pygame.sprite.Sprite):
         self.future_pos = pygame.Vector2(self.future_rect.topleft)
         self.future_vel = pygame.Vector2(self.vel.xy * self.future_speed_scalar)
 
-        """ DELETE THIS LATER """
-        self.future_image = pygame.Surface((15, 15))
-        self.future_image.fill((0, 255, 0))
+        """ UNCOMMENT THIS TO SHOW INVISIBLE BALL """
+        # self.future_image = pygame.Surface((15, 15))
+        # self.future_image.fill((0, 255, 0))
 
     def reset(self):
         current_time = pygame.time.get_ticks()
@@ -304,9 +303,9 @@ class Pong:
         self.interface.draw_text("{} | {}".format(self.player.score, self.computer.score), 48, (255, 255, 255), Pong.RESOLUTION[0]/2, 50)
         self.all_sprites.draw(Pong.screen)
 
-        """ DELETE THIS LATER """
-        for ball in Pong.ball_sprites:
-            Pong.screen.blit(ball.future_image, ball.future_pos)
+        """ UNCOMMENT THIS TO SHOW INVISIBLE BALL """
+        # for ball in Pong.ball_sprites:
+        #    Pong.screen.blit(ball.future_image, ball.future_pos)
 
         pygame.display.update()
 
